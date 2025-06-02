@@ -1,32 +1,44 @@
 <?php
+// ✅ hadi hiya l API key dyalek men OpenWeatherMap
 $apiKey = "d6688c5d054087e82e02539b82b16a42";
+
+// ✅ t3arrafna 3la variables dyal météo w forecast w error
 $weather = null;
 $forecast = null;
 $error = "";
 
+// ✅ hadi fonction katjib météo w forecast l chi mdina
 function fetchWeather($city, $apiKey) {
-    $cityEncoded = urlencode($city);
+    $cityEncoded = urlencode($city); // kandir encode l smiya dyal mdina bach tssla7 f URL
+
+    // ✅ lien dyal API météo w forecast
     $weatherUrl = "https://api.openweathermap.org/data/2.5/weather?q=$cityEncoded&appid=$apiKey&units=metric";
     $forecastUrl = "https://api.openweathermap.org/data/2.5/forecast?q=$cityEncoded&appid=$apiKey&units=metric";
 
+    // ✅ njibo l données men l API
     $weatherResponse = file_get_contents($weatherUrl);
     $forecastResponse = file_get_contents($forecastUrl);
 
+    // ✅ ncheckiw wach l réponses OK w n7awlohom l JSON
     if ($weatherResponse && $forecastResponse) {
         $weatherData = json_decode($weatherResponse, true);
         $forecastData = json_decode($forecastResponse, true);
 
+        // ✅ lkolchi mzyan? rj3 l données
         if ($weatherData["cod"] == 200 && $forecastData["cod"] == "200") {
             return [$weatherData, $forecastData];
         }
     }
+
+    // ❌ kan chi problème? rj3 null
     return [null, null];
 }
 
+// ✅ check wach l user d5al chi city f formulaire
 if (isset($_GET['city'])) {
     [$weather, $forecast] = fetchWeather($_GET['city'], $apiKey);
     if (!$weather) {
-        $error = "City not found or API error.";
+        $error = "City not found or API error."; // ❌ l mdina ma l9itash wla api ghalta
     }
 }
 ?>
@@ -37,6 +49,7 @@ if (isset($_GET['city'])) {
     <meta charset="UTF-8">
     <title>🌍 World Weather</title>
     <style>
+    /* ✅ CSS l design dyal l page, dark bg + glass effect */
     body {
         font-family: 'Segoe UI', sans-serif;
         margin: 0;
@@ -166,20 +179,24 @@ if (isset($_GET['city'])) {
 <div class="container">
     <h1>🌍 World Weather</h1>
 
+    <!-- ✅ formulaire bach l user yktb smiya dyal l mdina -->
     <form method="GET">
         <input type="text" name="city" placeholder="Enter city..." id="cityInput" required>
         <input type="submit" value="Search">
     </form>
 
+    <!-- ✅ bouton dyal geo-localisation -->
     <button class="geo-btn" onclick="getLocation()">📍 Use my location</button>
 
+    <!-- ✅ container dyal favorites -->
     <div class="favorites" id="favorites">
         <h3>⭐ Favorites</h3>
     </div>
 
     <?php if ($weather): ?>
         <?php
-            $timezoneOffset = $weather['timezone']; // in seconds
+            // ✅ calcul dial l heure local selon timezone
+            $timezoneOffset = $weather['timezone'];
             $localTime = gmdate("H:i", time() + $timezoneOffset);
         ?>
         <div class="weather-box">
@@ -193,6 +210,7 @@ if (isset($_GET['city'])) {
             <button onclick="addFavorite('<?= $weather['name'] ?>')">⭐ Add to Favorites</button>
         </div>
 
+        <!-- ✅ forecast cards (5 jours) -->
         <div class="forecast">
             <?php
             $shownDays = [];
@@ -216,11 +234,14 @@ if (isset($_GET['city'])) {
             ?>
         </div>
     <?php elseif ($error): ?>
+        <!-- ✅ message dyal error -->
         <div class="error"><?= $error ?></div>
     <?php endif; ?>
 </div>
 
+<!-- ✅ JavaScript bach nsayvo favorites w ngol l location -->
 <script>
+    // ✅ t9der tzid mdina f favorites (localStorage)
     function addFavorite(city) {
         let favorites = JSON.parse(localStorage.getItem("favorites")) || [];
         if (!favorites.includes(city)) {
@@ -230,6 +251,7 @@ if (isset($_GET['city'])) {
         }
     }
 
+    // ✅ lister les favoris w n3awd ndirhom f page
     function loadFavorites() {
         let favorites = JSON.parse(localStorage.getItem("favorites")) || [];
         const container = document.getElementById("favorites");
@@ -244,6 +266,7 @@ if (isset($_GET['city'])) {
         });
     }
 
+    // ✅ fonction l geo-localisation
     function getLocation() {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(position => {
@@ -261,6 +284,7 @@ if (isset($_GET['city'])) {
         }
     }
 
+    // ✅ 3la ma tkhl page, ndir load l favorites
     window.onload = loadFavorites;
 </script>
 </body>
