@@ -40,6 +40,59 @@ if (isset($_GET['city'])) {
     if (!$weather) {
         $error = "City not found or API error."; // ❌ l mdina ma l9itash wla api ghalta
     }
+    
+    // Si la requête est AJAX, retourner JSON et quitter
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        if ($weather) {
+            // Calcul du temps local
+            $timezoneOffset = $weather['timezone'];
+            $localTime = gmdate("H:i", time() + $timezoneOffset);
+            
+            // Préparation des données pour AJAX
+            $response = [
+                'success' => true,
+                'weather' => [
+                    'city' => $weather['name'],
+                    'country' => $weather['sys']['country'],
+                    'time' => $localTime,
+                    'icon' => $weather['weather'][0]['icon'],
+                    'temp' => $weather['main']['temp'],
+                    'description' => ucfirst($weather['weather'][0]['description']),
+                    'humidity' => $weather['main']['humidity'],
+                    'wind' => $weather['wind']['speed']
+                ],
+                'forecast' => []
+            ];
+            
+            // Préparation du forecast pour AJAX
+            $shownDays = [];
+            foreach ($forecast['list'] as $item) {
+                $dt = new DateTime($item['dt_txt']);
+                if ($dt->format('H') == '12') {
+                    $day = $dt->format('D');
+                    $date = $dt->format('M j');
+                    if (in_array($day, $shownDays)) continue;
+                    $shownDays[] = $day;
+                    
+                    $response['forecast'][] = [
+                        'day' => $day,
+                        'date' => $date,
+                        'icon' => $item['weather'][0]['icon'],
+                        'temp_min' => round($item['main']['temp_min']),
+                        'temp_max' => round($item['main']['temp_max']),
+                        'description' => ucfirst($item['weather'][0]['description'])
+                    ];
+                    
+                    if (count($shownDays) >= 5) break;
+                }
+            }
+        } else {
+            $response = ['success' => false, 'error' => $error];
+        }
+        echo json_encode($response);
+        exit;
+    }
 }
 ?>
 
@@ -173,6 +226,27 @@ if (isset($_GET['city'])) {
         border-radius: 0.5rem;
         text-align: center;
     }
+    
+    .loading {
+        text-align: center;
+        margin: 2rem 0;
+        display: none;
+    }
+    
+    .loading-spinner {
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top: 4px solid #ffffff;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
 </style>
 </head>
 <body>
@@ -180,7 +254,7 @@ if (isset($_GET['city'])) {
     <h1>🌍 World Weather</h1>
 
     <!-- ✅ formulaire bach l user yktb smiya dyal l mdina -->
-    <form method="GET">
+    <form method="GET" id="weatherForm">
         <input type="text" name="city" placeholder="Enter city..." id="cityInput" required>
         <input type="submit" value="Search">
     </form>
@@ -192,51 +266,59 @@ if (isset($_GET['city'])) {
     <div class="favorites" id="favorites">
         <h3>⭐ Favorites</h3>
     </div>
+    
+    <!-- Loading indicator -->
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <p>Loading weather data...</p>
+    </div>
 
-    <?php if ($weather): ?>
-        <?php
-            // ✅ calcul dial l heure local selon timezone
-            $timezoneOffset = $weather['timezone'];
-            $localTime = gmdate("H:i", time() + $timezoneOffset);
-        ?>
-        <div class="weather-box">
-            <h2><?= htmlspecialchars($weather['name']) ?>, <?= $weather['sys']['country'] ?></h2>
-            <p>🕒 Local Time: <?= $localTime ?></p>
-            <img src="https://openweathermap.org/img/wn/<?= $weather['weather'][0]['icon'] ?>@2x.png" alt="">
-            <p><strong><?= $weather['main']['temp'] ?>°C</strong></p>
-            <p><?= ucfirst($weather['weather'][0]['description']) ?></p>
-            <p>💧 Humidity: <?= $weather['main']['humidity'] ?>%</p>
-            <p>💨 Wind: <?= $weather['wind']['speed'] ?> m/s</p>
-            <button onclick="addFavorite('<?= $weather['name'] ?>')">⭐ Add to Favorites</button>
-        </div>
-
-        <!-- ✅ forecast cards (5 jours) -->
-        <div class="forecast">
+    <div id="weatherContent">
+        <?php if ($weather): ?>
             <?php
-            $shownDays = [];
-            foreach ($forecast['list'] as $item) {
-                $dt = new DateTime($item['dt_txt']);
-                if ($dt->format('H') == '12') {
-                    $day = $dt->format('D');
-                    $date = $dt->format('M j');
-                    if (in_array($day, $shownDays)) continue;
-                    $shownDays[] = $day;
-                    echo '<div class="card">';
-                    echo "<h3>$day</h3>";
-                    echo "<p>$date</p>";
-                    echo "<img src='https://openweathermap.org/img/wn/{$item['weather'][0]['icon']}@2x.png' alt=''>";
-                    echo "<p><strong>" . round($item['main']['temp_min']) . "° / " . round($item['main']['temp_max']) . "°C</strong></p>";
-                    echo "<p>" . ucfirst($item['weather'][0]['description']) . "</p>";
-                    echo '</div>';
-                }
-                if (count($shownDays) >= 5) break;
-            }
+                // ✅ calcul dial l heure local selon timezone
+                $timezoneOffset = $weather['timezone'];
+                $localTime = gmdate("H:i", time() + $timezoneOffset);
             ?>
-        </div>
-    <?php elseif ($error): ?>
-        <!-- ✅ message dyal error -->
-        <div class="error"><?= $error ?></div>
-    <?php endif; ?>
+            <div class="weather-box">
+                <h2><?= htmlspecialchars($weather['name']) ?>, <?= $weather['sys']['country'] ?></h2>
+                <p>🕒 Local Time: <?= $localTime ?></p>
+                <img src="https://openweathermap.org/img/wn/<?= $weather['weather'][0]['icon'] ?>@2x.png" alt="">
+                <p><strong><?= $weather['main']['temp'] ?>°C</strong></p>
+                <p><?= ucfirst($weather['weather'][0]['description']) ?></p>
+                <p>💧 Humidity: <?= $weather['main']['humidity'] ?>%</p>
+                <p>💨 Wind: <?= $weather['wind']['speed'] ?> m/s</p>
+                <button onclick="addFavorite('<?= $weather['name'] ?>')">⭐ Add to Favorites</button>
+            </div>
+
+            <!-- ✅ forecast cards (5 jours) -->
+            <div class="forecast">
+                <?php
+                $shownDays = [];
+                foreach ($forecast['list'] as $item) {
+                    $dt = new DateTime($item['dt_txt']);
+                    if ($dt->format('H') == '12') {
+                        $day = $dt->format('D');
+                        $date = $dt->format('M j');
+                        if (in_array($day, $shownDays)) continue;
+                        $shownDays[] = $day;
+                        echo '<div class="card">';
+                        echo "<h3>$day</h3>";
+                        echo "<p>$date</p>";
+                        echo "<img src='https://openweathermap.org/img/wn/{$item['weather'][0]['icon']}@2x.png' alt=''>";
+                        echo "<p><strong>" . round($item['main']['temp_min']) . "° / " . round($item['main']['temp_max']) . "°C</strong></p>";
+                        echo "<p>" . ucfirst($item['weather'][0]['description']) . "</p>";
+                        echo '</div>';
+                    }
+                    if (count($shownDays) >= 5) break;
+                }
+                ?>
+            </div>
+        <?php elseif ($error): ?>
+            <!-- ✅ message dyal error -->
+            <div class="error"><?= $error ?></div>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- ✅ JavaScript bach nsayvo favorites w ngol l location -->
@@ -260,7 +342,7 @@ if (isset($_GET['city'])) {
             const el = document.createElement("span");
             el.textContent = city;
             el.onclick = () => {
-                window.location.href = `?city=${encodeURIComponent(city)}`;
+                fetchWeather(city);
             };
             container.appendChild(el);
         });
@@ -275,7 +357,7 @@ if (isset($_GET['city'])) {
                     .then(response => response.json())
                     .then(data => {
                         if (data.name) {
-                            window.location.href = `?city=${encodeURIComponent(data.name)}`;
+                            fetchWeather(data.name);
                         }
                     });
             });
@@ -283,9 +365,112 @@ if (isset($_GET['city'])) {
             alert("Geolocation not supported.");
         }
     }
+    
+    // Fonction pour charger les données météo via AJAX
+    function fetchWeather(city) {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('weatherContent').style.display = 'none';
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `?city=${encodeURIComponent(city)}`, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        
+        xhr.onload = function() {
+            document.getElementById('loading').style.display = 'none';
+            
+            if (this.status == 200) {
+                try {
+                    const response = JSON.parse(this.responseText);
+                    
+                    if (response.success) {
+                        // Mise à jour de l'interface avec les nouvelles données
+                        const weather = response.weather;
+                        const forecast = response.forecast;
+                        
+                        let weatherHTML = `
+                            <div class="weather-box">
+                                <h2>${weather.city}, ${weather.country}</h2>
+                                <p>🕒 Local Time: ${weather.time}</p>
+                                <img src="https://openweathermap.org/img/wn/${weather.icon}@2x.png" alt="">
+                                <p><strong>${weather.temp}°C</strong></p>
+                                <p>${weather.description}</p>
+                                <p>💧 Humidity: ${weather.humidity}%</p>
+                                <p>💨 Wind: ${weather.wind} m/s</p>
+                                <button onclick="addFavorite('${weather.city}')">⭐ Add to Favorites</button>
+                            </div>
+                            <div class="forecast">
+                        `;
+                        
+                        forecast.forEach(day => {
+                            weatherHTML += `
+                                <div class="card">
+                                    <h3>${day.day}</h3>
+                                    <p>${day.date}</p>
+                                    <img src="https://openweathermap.org/img/wn/${day.icon}@2x.png" alt="">
+                                    <p><strong>${day.temp_min}° / ${day.temp_max}°C</strong></p>
+                                    <p>${day.description}</p>
+                                </div>
+                            `;
+                        });
+                        
+                        weatherHTML += `</div>`;
+                        
+                        document.getElementById('weatherContent').innerHTML = weatherHTML;
+                    } else {
+                        document.getElementById('weatherContent').innerHTML = `
+                            <div class="error">${response.error}</div>
+                        `;
+                    }
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('weatherContent').innerHTML = `
+                        <div class="error">Error parsing response</div>
+                    `;
+                }
+            } else {
+                document.getElementById('weatherContent').innerHTML = `
+                    <div class="error">Error fetching weather data</div>
+                `;
+            }
+            
+            document.getElementById('weatherContent').style.display = 'block';
+            // Mettre à jour l'URL sans recharger la page
+            history.pushState(null, null, `?city=${encodeURIComponent(city)}`);
+        };
+        
+        xhr.onerror = function() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('weatherContent').innerHTML = `
+                <div class="error">Network error</div>
+            `;
+            document.getElementById('weatherContent').style.display = 'block';
+        };
+        
+        xhr.send();
+    }
 
     // ✅ 3la ma tkhl page, ndir load l favorites
-    window.onload = loadFavorites;
+    window.onload = function() {
+        loadFavorites();
+        
+        // Intercepter le formulaire pour utiliser AJAX
+        document.getElementById('weatherForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const city = document.getElementById('cityInput').value.trim();
+            if (city) {
+                fetchWeather(city);
+            }
+        });
+        
+        // Gérer le bouton retour
+        window.addEventListener('popstate', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const city = urlParams.get('city');
+            if (city) {
+                fetchWeather(city);
+            }
+        });
+    };
 </script>
 </body>
 </html>
